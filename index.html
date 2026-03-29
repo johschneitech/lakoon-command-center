@@ -1029,7 +1029,30 @@ function refreshDeps(card){
   c.innerHTML=h;
 }
 function addComment(){const card=S.cards[editCardId];if(!card)return;const inp=document.getElementById('commInput');if(!inp)return;const text=inp.value.trim();if(!text)return;card.comments=card.comments||[];const mid=currMid();card.comments.push({text,memberId:mid,at:new Date().toISOString()});inp.value='';const list=document.getElementById('commList');if(list){const m=gm(mid);const t=new Date().toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});list.insertAdjacentHTML('beforeend','<div class="comm-i"><div class="comm-hd">'+(m?'<div class="comm-av" style="background:'+m.color+'">'+m.initials+'</div><span class="comm-au">'+esc(m.name)+'</span>':'<span class="comm-au">Team member</span>')+'<span class="comm-at">'+t+'</span></div><div class="comm-tx">'+esc(text)+'</div></div>');list.scrollTop=list.scrollHeight;}save();showToast('Comment added ✓');}
-function goToCard(cid,bid){closeModal();closeDepPicker();if(bid&&bid!=='__dashboard__'&&bid!==S.activeBoard){S.activeBoard=bid;render();setTimeout(()=>openCard(cid),80);}else openCard(cid);}
+function goToCard(cid,bid){
+  closeModal();
+  closeDepPicker();
+  const targetBid = bid && bid !== '__dashboard__' ? bid : findBoard(cid);
+  if(targetBid && targetBid !== S.activeBoard){
+    S.activeBoard = targetBid;
+    S.filters = {member:null,label:null,due:null,sprint:null};
+    const area = document.getElementById('boardArea');
+    if(area){area.innerHTML='';area.style.width='max-content';area.style.minWidth='100%';}
+    if(S.boards[targetBid])for(const c of(S.boards[targetBid].columns||[]))if(!S.columns[c.id])S.columns[c.id]=[];
+    render();
+    setTimeout(()=>{
+      const el = document.getElementById('card-'+cid);
+      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+      setTimeout(()=>openCard(cid), 80);
+    }, 180);
+  } else {
+    setTimeout(()=>{
+      const el = document.getElementById('card-'+cid);
+      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+      openCard(cid);
+    }, 60);
+  }
+}
 // DRAG AND DROP with priority reordering
 function onDragStart(e,cid){dragCardId=cid;dragSrcCol=findCol(cid);setTimeout(()=>{const el=document.getElementById('card-'+cid);if(el)el.classList.add('dragging');},0);e.dataTransfer.effectAllowed='move';}
 function onDragEnd(e){if(dragCardId){const el=document.getElementById('card-'+dragCardId);if(el)el.classList.remove('dragging');}document.querySelectorAll('.drop-ph').forEach(p=>p.remove());dragCardId=null;dragSrcCol=null;}
