@@ -493,7 +493,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
 <div class="mo hidden" id="modalOverlay">
   <div class="modal" id="cardModal">
     <div class="modal-hd">
-      <textarea class="modal-title" id="modalTitle" rows="1" placeholder="Card title..."></textarea>
+      <div style="flex:1">
+        <textarea class="modal-title" id="modalTitle" rows="1" placeholder="Card title..." oninput="onTitleInput()"></textarea>
+        <div id="titleWarning" style="display:none;font-size:11px;color:var(--dn);margin-top:4px;font-weight:500">⚠️ Please add a title before your changes are saved.</div>
+      </div>
       <button class="mx" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
@@ -502,9 +505,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
         <button class="btn btn-d btn-sm" onclick="deleteCard()">🗑 Delete</button>
         <button class="btn btn-g btn-sm" onclick="archiveCard()">📦 Archive</button>
       </div>
-      <div class="modal-fr">
-        <button class="btn btn-g btn-sm" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-p btn-sm" onclick="saveCard()">Save Card</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="autoSaveIndicator" style="font-size:11px;color:var(--dm);font-family:'DM Mono',monospace;transition:all .2s"></span>
+        <button class="btn btn-g btn-sm" onclick="closeModal()">Close</button>
       </div>
     </div>
   </div>
@@ -909,32 +912,76 @@ function createCard(colId){
   renderBoard();renderNav();
   setTimeout(()=>openCard(id),50);
 }
-function openCard(cid){
-  editCardId=cid;const card=S.cards[cid];if(!card){showToast('Card not found');return;}
-  document.getElementById('modalTitle').value=card.title;
-  document.getElementById('modalBody').innerHTML=buildModalBody(card);
-  const clI=document.getElementById('clAddI');if(clI)clI.addEventListener('keydown',e=>{if(e.key==='Enter'&&clI.value.trim()){addClItem(clI.value.trim());clI.value='';}});
-  const cmI=document.getElementById('commInput');if(cmI)cmI.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment();}});
-  document.getElementById('modalOverlay').classList.remove('hidden');
-  document.getElementById('modalTitle').focus();
-}
-function saveCard(){
+let autoSaveTimer=null;
+function showAutoSaveIndicator(state){
+  const el=document.getElementById('autoSaveIndicator');if(!el)return;
+  if(state==='saving'){el.textContent='↑ Saving...';el.style.color='var(--wn)';}
+  else if(state==='saved'){el.textContent='✓ Saved';el.style.color='var(--ok)';}
+  else{el.textContent='';}}
+function onTitleInput(){
+  const tw=document.getElementById('titleWarning');
+  const title=document.getElementById('modalTitle')?.value.trim();
+  if(tw)tw.style.display=title?'none':'block';
+  if(title)triggerAutoSave();}
+function triggerAutoSave(){
   const card=S.cards[editCardId];if(!card)return;
+  const title=document.getElementById('modalTitle')?.value.trim();
+  if(!title)return; // don't save without title
+  if(autoSaveTimer)clearTimeout(autoSaveTimer);
+  showAutoSaveIndicator('saving');
+  autoSaveTimer=setTimeout(()=>{doAutoSave();},700);}
+function doAutoSave(){
+  const card=S.cards[editCardId];if(!card)return;
+  const title=document.getElementById('modalTitle')?.value.trim();
+  if(!title){showAutoSaveIndicator('');return;}
   const prevTitle=card.title;
-  card.title=document.getElementById('modalTitle').value.trim()||'Untitled card';
+  card.title=title;
   card.due=document.getElementById('modalDue')?.value||'';
   card.description=document.getElementById('modalDesc')?.value||'';
   if(document.getElementById('modalSteps'))card.steps=document.getElementById('modalSteps').value;
   if(document.getElementById('modalSuggest'))card.suggestedFix=document.getElementById('modalSuggest').value;
   if(prevTitle&&prevTitle!==card.title){card.history=card.history||[];card.history.push({text:'Renamed by '+getMyName()+' · '+new Date().toLocaleDateString('en-CA',{month:'short',day:'numeric'}),at:new Date().toISOString()});}
-  checkNotify(card,editCardId);save();closeModal();
+  checkNotify(card,editCardId);save();
   const el=document.getElementById('card-'+editCardId);if(el)el.outerHTML=renderCard(editCardId);
-  renderNav();showToast('Card saved ✓');
+  renderNav();showAutoSaveIndicator('saved');
+  setTimeout(()=>showAutoSaveIndicator(''),2500);}
+function openCard(cid){
+  editCardId=cid;const card=S.cards[cid];if(!card){showToast('Card not found');return;}
+  document.getElementById('modalTitle').value=card.title;
+  const tw=document.getElementById('titleWarning');if(tw)tw.style.display='none';
+  showAutoSaveIndicator('');
+  document.getElementById('modalBody').innerHTML=buildModalBody(card);
+  const clI=document.getElementById('clAddI');if(clI)clI.addEventListener('keydown',e=>{if(e.key==='Enter'&&clI.value.trim()){addClItem(clI.value.trim());clI.value='';}});
+  const cmI=document.getElementById('commInput');if(cmI)cmI.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment();}});
+  // attach auto-save to all modal fields
+  setTimeout(()=>{
+    ['modalDue','modalDesc','modalSteps','modalSuggest'].forEach(fid=>{
+      const el=document.getElementById(fid);if(el)el.addEventListener('input',()=>triggerAutoSave());
+    });
+  },100);
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('modalTitle').focus();
 }
 function getMyName(){const mid=currMid();const m=gm(mid);return m?m.name:'Team member';}
 function deleteCard(){if(!editCardId)return;if(!confirm('Delete this card? Cannot be undone.'))return;const colId=findCol(editCardId);if(colId)S.columns[colId]=S.columns[colId].filter(id=>id!==editCardId);Object.values(S.cards).forEach(c=>{c.deps=(c.deps||[]).filter(d=>d!==editCardId);});const el=document.getElementById('card-'+editCardId);if(el)el.remove();delete S.cards[editCardId];save();closeModal();renderNav();showToast('Card deleted');}
 function archiveCard(){if(!editCardId)return;const card=S.cards[editCardId];if(!card)return;const colId=findCol(editCardId),bid=findBoard(editCardId);S.archived.push({cardId:editCardId,card:JSON.parse(JSON.stringify(card)),fromCol:colId,fromBoard:bid,archivedAt:new Date().toISOString()});if(colId)S.columns[colId]=S.columns[colId].filter(id=>id!==editCardId);Object.values(S.cards).forEach(c=>{c.deps=(c.deps||[]).filter(d=>d!==editCardId);});const el=document.getElementById('card-'+editCardId);if(el)el.remove();delete S.cards[editCardId];save();closeModal();renderNav();showToast('Card archived ✓');}
-function closeModal(){document.getElementById('modalOverlay').classList.add('hidden');editCardId=null;}
+function closeModal(){
+  // if no title, auto-delete the card silently
+  const card=S.cards[editCardId];
+  if(card&&!card.title.trim()&&!document.getElementById('modalTitle')?.value.trim()){
+    const colId=findCol(editCardId);
+    if(colId)S.columns[colId]=S.columns[colId].filter(id=>id!==editCardId);
+    delete S.cards[editCardId];
+    save();renderBoard();renderNav();
+  } else if(card){
+    // flush any pending auto-save before closing
+    if(autoSaveTimer){clearTimeout(autoSaveTimer);doAutoSave();}
+  }
+  if(autoSaveTimer)clearTimeout(autoSaveTimer);
+  autoSaveTimer=null;
+  document.getElementById('modalOverlay').classList.add('hidden');
+  editCardId=null;
+}
 function buildModalBody(card){
   const isFB=S.activeBoard==='feedback';let h='';
   h+='<div><div class="msect">🏷️ Labels</div><div class="lblgrid">';
@@ -974,14 +1021,14 @@ function buildModalBody(card){
   h+='<div><div class="msect">☑️ Definition of Done Checklist</div><div class="cl-items" id="clItems">'+renderCLH(card.checklist||[])+'</div><div class="cl-add-row"><input class="cl-add-i" id="clAddI" placeholder="Add item and press Enter..."></div></div>';
   return h;
 }
-function toggleLbl(lid,el){const card=S.cards[editCardId];if(!card)return;card.labels=card.labels||[];const i=card.labels.indexOf(lid);if(i>=0){card.labels.splice(i,1);el.classList.remove('sel');}else{card.labels.push(lid);el.classList.add('sel');}}
+function toggleLbl(lid,el){const card=S.cards[editCardId];if(!card)return;card.labels=card.labels||[];const i=card.labels.indexOf(lid);if(i>=0){card.labels.splice(i,1);el.classList.remove('sel');}else{card.labels.push(lid);el.classList.add('sel');}triggerAutoSave();}
 function selFBT(el){const card=S.cards[editCardId];if(!card)return;const id=el.dataset.id,c=el.dataset.c;card.feedbackType=card.feedbackType===id?'':id;document.querySelectorAll('.fb-tb').forEach(e=>{e.style.cssText='padding:4px 10px;border-radius:14px;border:1.5px solid var(--bd);font-size:10.5px;font-weight:500;cursor:pointer;color:var(--mu);background:var(--sf)';});if(card.feedbackType){el.style.borderColor=c;el.style.background=c+'18';el.style.color=c;}}
 function selSev(el){const card=S.cards[editCardId];if(!card)return;const s=el.dataset.sev;card.severity=card.severity===s?'':s;document.querySelectorAll('.spopt[data-sev]').forEach(e=>e.className='spopt');if(card.severity)el.className='spopt spc';}
 function selRB(el){const card=S.cards[editCardId];if(!card)return;const id=el.dataset.rb;card.relatedBoard=card.relatedBoard===id?'':id;document.querySelectorAll('.rb-tb').forEach(e=>{e.style.cssText='padding:3px 10px;border-radius:12px;border:1.5px solid var(--bd);font-size:11px;font-weight:500;cursor:pointer;color:var(--mu);background:var(--sf)';});if(card.relatedBoard){el.style.borderColor='var(--ac)';el.style.background='var(--ac-bg)';el.style.color='var(--ac)';}}
-function selSprint(val,el){const card=S.cards[editCardId];if(!card)return;card.sprint=val;document.querySelectorAll('.spopt[onclick^="selSprint"]').forEach(e=>e.className='spopt');const map={current:'spc',next:'spn',backlog:'spb'};el.className='spopt '+(map[val]||'');}
+function selSprint(val,el){const card=S.cards[editCardId];if(!card)return;card.sprint=val;document.querySelectorAll('.spopt[onclick^="selSprint"]').forEach(e=>e.className='spopt');const map={current:'spc',next:'spn',backlog:'spb'};el.className='spopt '+(map[val]||'');triggerAutoSave();}
 function filterMAC(){const card=S.cards[editCardId];if(!card)return;const q=(document.getElementById('macInput')?.value||'').toLowerCase().trim();const asgn=new Set(card.members||[]);const dd=document.getElementById('macDrop');if(!dd)return;const res=S.members.filter(m=>!q||m.name.toLowerCase().includes(q)||(m.email||'').toLowerCase().includes(q));if(!res.length){dd.innerHTML='<div style="padding:10px 11px;font-size:12px;color:var(--dm)">No members found</div>';dd.classList.add('open');return;}dd.innerHTML=res.map(m=>'<div class="maci'+(asgn.has(m.id)?' asgn':'')+'" onclick="assignMember(\''+m.id+'\')"><div class="mav" style="background:'+m.color+';width:20px;height:20px;font-size:7.5px;margin-left:0">'+m.initials+'</div><div style="flex:1"><div style="font-size:12.5px;font-weight:500">'+esc(m.name)+'</div>'+(m.email?'<div style="font-size:10px;color:var(--mu)">'+esc(m.email)+'</div>':'')+'</div>'+(asgn.has(m.id)?'<span style="font-size:10px;color:var(--ok)">✓</span>':'')+'</div>').join('');dd.classList.add('open');}
-function assignMember(mid){const card=S.cards[editCardId];if(!card)return;card.members=card.members||[];if(!card.members.includes(mid)){card.members.push(mid);refreshAchips(card);}filterMAC();const inp=document.getElementById('macInput');if(inp){inp.value='';inp.focus();}}
-function removeAssignee(mid,e){e.stopPropagation();const card=S.cards[editCardId];if(!card)return;card.members=(card.members||[]).filter(id=>id!==mid);refreshAchips(card);filterMAC();}
+function assignMember(mid){const card=S.cards[editCardId];if(!card)return;card.members=card.members||[];if(!card.members.includes(mid)){card.members.push(mid);refreshAchips(card);}filterMAC();const inp=document.getElementById('macInput');if(inp){inp.value='';inp.focus();}triggerAutoSave();}
+function removeAssignee(mid,e){e.stopPropagation();const card=S.cards[editCardId];if(!card)return;card.members=(card.members||[]).filter(id=>id!==mid);refreshAchips(card);filterMAC();triggerAutoSave();}
 function refreshAchips(card){const c=document.getElementById('achips');if(!c)return;const ids=card.members||[];if(!ids.length){c.innerHTML='<span style="font-size:11.5px;color:var(--dm)">No one assigned yet</span>';return;}c.innerHTML=ids.map(mid=>{const m=gm(mid);if(!m)return'';return'<div class="achip" style="background:'+m.color+'"><div style="width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.3);color:#fff;font-size:7px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+m.initials+'</div>'+esc(m.name)+'<button class="achip-x" onclick="removeAssignee(\''+mid+'\',event)">✕</button></div>';}).join('');}
 function handleImgUpload(e){const card=S.cards[editCardId];if(!card)return;card.images=card.images||[];Array.from(e.target.files).forEach(file=>{if(!file.type.startsWith('image/'))return;const reader=new FileReader();reader.onload=ev=>{card.images.push(ev.target.result);refreshImgs(card);};reader.readAsDataURL(file);});e.target.value='';}
 function refreshImgs(card){const c=document.getElementById('imgPreviews');if(!c)return;c.innerHTML=(card.images||[]).map((src,i)=>'<div class="img-pv"><img src="'+src+'" alt="img"><button class="img-px" onclick="removeImg('+i+',event)">✕</button></div>').join('');}
@@ -1276,7 +1323,7 @@ document.addEventListener('keydown',e=>{
     for(const id of['teamPov','newBoardPov','profilePov']){if(!document.getElementById(id).classList.contains('hidden')){closePov(id);return;}}
     closeModal();
   }
-  if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();if(editCardId&&document.activeElement?.id!=='commInput')saveCard();}
+  if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();if(editCardId&&document.activeElement?.id!=='commInput')doAutoSave();}
 });
 document.getElementById('newMemberName').addEventListener('keydown',e=>{if(e.key==='Enter')addMember();});
 checkSession();
