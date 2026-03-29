@@ -837,7 +837,7 @@ function showMsg(msg){const el=document.getElementById('loginMsg');el.textConten
 function hideMsg(){const e=document.getElementById('loginErr'),m=document.getElementById('loginMsg');if(e)e.style.display='none';if(m)m.style.display='none';}
 function renderNav(){
   document.getElementById('boardNav').innerHTML=Object.entries(S.boards||{}).map(([id,b])=>{
-    const canDel=!b.isDefault&&!DEF_IDS.has(id);const ov=hasOverdue(id);
+    const canDel=!b.isDefault&&!isDefaultBoard(id);const ov=hasOverdue(id);
     return'<div class="btab'+(id===S.activeBoard?' act':'')+'" onclick="switchBoard(\''+id+'\')">'
       +b.icon+' '+esc(b.name)+'<span class="btab-count">'+totCards(id)+'</span>'
       +(ov?'<span class="btab-overdue show" title="Has overdue cards"></span>':'')
@@ -897,7 +897,7 @@ function renderBoard(){
     return'<div class="col col-'+col.theme+' '+(mini?'mini':'exp')+'" id="col-'+col.id+'" ondragover="onDragOver(event,\''+col.id+'\')" ondragleave="onDragLeave(event)" ondrop="onDrop(event,\''+col.id+'\')">'
       +'<div class="col-hd"><div class="col-tw"><span class="col-title">'+esc(col.title)+'</span><span class="col-count">'+vis+'</span></div>'
       +'<div class="col-acts">'+(mini?'':'<button class="cibtn" onclick="openColPicker(event,\''+col.id+'\')" title="Color/Rename">🎨</button>')
-      +(mini?'':'<button class="cibtn" onclick="delCol(\''+col.id+'\')" title="Delete column">🗑</button>')
+      +(mini?'':(!isDefaultCol(col.id)?'<button class="cibtn" onclick="delCol(\''+col.id+'\')" title="Delete column">🗑</button>':''))
       +'<button class="cibtn" onclick="toggleMin(\''+col.id+'\')">'+(mini?'▶':'◀')+'</button>'
       +(mini?'':'<button class="cibtn" onclick="createCard(\''+col.id+'\')">＋</button>')+'</div>'
       +'<div class="cpop" id="cpop-'+col.id+'"></div></div>'
@@ -933,6 +933,7 @@ function addColumn(){
   newColTheme='grey';save();renderBoard();showToast('"'+title+'" column added ✓');
 }
 function delCol(colId){
+  if(isDefaultCol(colId)){showToast('⚠️ Default columns cannot be deleted');return;}
   const board=S.boards[S.activeBoard];if(!board)return;
   const col=board.columns.find(c=>c.id===colId);if(!col)return;
   const cnt=(S.columns[colId]||[]).length;
@@ -953,7 +954,7 @@ function openColPicker(e,colId){
 function saveColRename(colId,e){e.stopPropagation();const inp=document.getElementById('ren-'+colId);if(!inp)return;const title=inp.value.trim();if(!title){showToast('⚠️ Name cannot be empty');return;}for(const b of Object.values(S.boards)){const c=b.columns.find(c=>c.id===colId);if(c){c.title=title;break;}}document.querySelectorAll('.cpop').forEach(p=>p.classList.remove('open'));save();renderBoard();showToast('Column renamed ✓');}
 function setColTheme(colId,theme,e){e.stopPropagation();for(const b of Object.values(S.boards)){const c=b.columns.find(c=>c.id===colId);if(c){c.theme=theme;break;}}document.querySelectorAll('.cpop').forEach(p=>p.classList.remove('open'));save();renderBoard();showToast('Color updated ✓');}
 function createBoard(){const name=document.getElementById('newBoardName').value.trim();if(!name){showToast('⚠️ Enter a board name');return;}const id=brdUid();S.boards[id]={name,icon:newBoardEmoji||'📋',isDefault:false,columns:[{id:colUid(),title:'📋 Backlog',theme:'grey'},{id:colUid(),title:'⚙️ In Progress',theme:'green'},{id:colUid(),title:'✅ Done',theme:'blue'}]};S.boards[id].columns.forEach(c=>S.columns[c.id]=[]);closePov('newBoardPov');save();switchBoard(id);showToast('"'+name+'" created ✓');}
-function deleteBoard(id){const b=S.boards[id];if(!b)return;if(b.isDefault||DEF_IDS.has(id)){showToast('⚠️ Default boards cannot be deleted');return;}const cnt=(b.columns||[]).reduce((s,c)=>s+(S.columns[c.id]||[]).length,0);if(!confirm('Delete "'+b.name+'"?'+(cnt?' '+cnt+' cards will be deleted.':'')+'  Cannot be undone.'))return;const n=b.name;(b.columns||[]).forEach(col=>{(S.columns[col.id]||[]).forEach(cid=>{Object.values(S.cards).forEach(c=>{c.deps=(c.deps||[]).filter(d=>d!==cid);});delete S.cards[cid];});delete S.columns[col.id];});delete S.boards[id];S.activeBoard='it';save();render();showToast('"'+n+'" deleted ✓');}
+function deleteBoard(id){const b=S.boards[id];if(!b)return;if(b.isDefault||isDefaultBoard(id)){showToast('⚠️ Default boards cannot be deleted');return;}const cnt=(b.columns||[]).reduce((s,c)=>s+(S.columns[c.id]||[]).length,0);if(!confirm('Delete "'+b.name+'"?'+(cnt?' '+cnt+' cards will be deleted.':'')+'  Cannot be undone.'))return;const n=b.name;(b.columns||[]).forEach(col=>{(S.columns[col.id]||[]).forEach(cid=>{Object.values(S.cards).forEach(c=>{c.deps=(c.deps||[]).filter(d=>d!==cid);});delete S.cards[cid];});delete S.columns[col.id];});delete S.boards[id];S.activeBoard='it';save();render();showToast('"'+n+'" deleted ✓');}
 function getBoardCL(bid){const base=[{text:'Task fully built / executed',done:false},{text:'Reviewed against requirements',done:false},{text:'French language check (Bill 96)',done:false},{text:'Reviewed and signed off',done:false},{text:'Synced to master Google Sheet',done:false}];const extras={it:[{text:'Code reviewed by team member',done:false},{text:'Tested on mobile and desktop',done:false},{text:'No console errors',done:false}],marketing:[{text:'Copy proofread in French and English',done:false},{text:'Brand guidelines followed',done:false}],operations:[{text:'Process documented in SOP',done:false},{text:'Tenant impact assessed',done:false}],compliance:[{text:'Legal source cited',done:false},{text:'Quebec requirements verified',done:false}],feedback:[{text:'Steps to reproduce documented',done:false},{text:'Screenshot attached',done:false}]};return[...base,...(extras[bid]||[])];}
 function createCard(colId){
   const id=uid(S.activeBoard);const isFB=S.activeBoard==='feedback';
@@ -1358,8 +1359,19 @@ function renderAnalytics(){
     const ctxB=document.getElementById('cB');if(ctxB&&window.Chart){const bLabels=Object.values(S.boards).map(b=>b.name.slice(0,16));const bData=Object.keys(S.boards).map(id=>bCounts[id]||0);const bColors=Object.keys(S.boards).map(id=>{const c=BCHIPS[id];return c?c.c+'cc':'#4361eecc';});chartInst.board=new Chart(ctxB,{type:'bar',data:{labels:bLabels,datasets:[{label:'Cards',data:bData,backgroundColor:bColors,borderRadius:5,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.raw+' cards';}}}},scales:{x:{beginAtZero:true,ticks:{stepSize:1,font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}},y:{ticks:{font:{size:10,family:'DM Sans,sans-serif'}},grid:{display:false}}}}});}
   },80);
 }
+// ── DEFAULT COLUMN IDS (protected from deletion) ──
+const DEFAULT_COL_IDS=new Set([
+  'it-backlog','it-progress','it-fix','it-testing','it-done',
+  'mkt-backlog','mkt-progress','mkt-revision','mkt-approval','mkt-launched',
+  'ops-backlog','ops-progress','ops-blocked','ops-approval','ops-live',
+  'cmp-backlog','cmp-research','cmp-clarify','cmp-signoff','cmp-confirmed',
+  'fb-new','fb-review','fb-progress','fb-testing','fb-resolved'
+]);
+function isDefaultCol(colId){return DEFAULT_COL_IDS.has(colId);}
+function isDefaultBoard(bid){return DEF_IDS.has(bid);}
+
+// ── MEETINGS BOARD — KANBAN LAYOUT ──
 function renderThursday(){
-  if(typeof window._mtgSelCard==='undefined')window._mtgSelCard=null;
   const now=new Date();now.setHours(0,0,0,0);
   const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);
   const FOCUS_COLS=new Set([...INPROG_COLS,...['it-fix','ops-blocked']]);
@@ -1376,108 +1388,102 @@ function renderThursday(){
       }
     }
   }
-  function groupByBoard(items){const map={};const order=[];items.forEach(x=>{if(!map[x.bid]){map[x.bid]=[];order.push(x.bid);}map[x.bid].push(x);});return{map,order};}
-  function mtgCardHTML(x,sectionKey){
-    const{cid,card,bid,ds}=x;const mems=gcm(card);const chip=BCHIPS[bid]||{l:bid,bg:'#eee',c:'#555'};
-    const di=ds==='overdue'?'🚨':ds==='soon'?'⏰':ds==='ok'?'📅':'';const isAct=window._mtgSelCard===cid;const blocked=isBlocked(card);
-    let h='<div class="mtg-card'+(isAct?' active':'')+'" id="mtgc-'+cid+'" draggable="true" ondragstart="mtgDragStart(event,\''+cid+'\',\''+sectionKey+'\')" ondragend="mtgDragEnd(event)" onclick="mtgSelectCard(\''+cid+'\',\''+bid+'\')">';
+  function mtgCardHTML(x,sectKey){
+    const{cid,card,bid,ds}=x;
+    const mems=gcm(card);const chip=BCHIPS[bid]||{l:bid,bg:'#eee',c:'#555'};
+    const blocked=isBlocked(card);const prog=clProg(card.checklist);
+    const bd=bDeps(card);const di=ds==='overdue'?'🚨':ds==='soon'?'⏰':ds==='ok'?'📅':'';
+    let h='<div class="mtg-card" id="mtgc-'+cid+'" draggable="true"'
+      +' ondragstart="mtgDragStart(event,\''+cid+'\',\''+sectKey+'\')"'
+      +' ondragend="mtgDragEnd(event)"'
+      +' onclick="openCard(\''+cid+'\')">';
     h+='<div class="mtg-card-top">';
-    h+='<span style="font-size:9px;font-weight:700;background:'+chip.bg+';color:'+chip.c+';padding:1px 6px;border-radius:6px">'+chip.l+'</span>';
+    h+='<span style="font-size:9px;font-weight:700;background:'+chip.bg+';color:'+chip.c+';padding:1px 6px;border-radius:6px;white-space:nowrap">'+chip.l+'</span>';
     if(blocked)h+='<span style="font-size:9px;font-weight:700;background:var(--dn-bg);color:var(--dn);padding:1px 6px;border-radius:6px">⛔ Blocked</span>';
     if(ds==='overdue')h+='<span style="font-size:9px;font-weight:700;background:var(--dn-bg);color:var(--dn);padding:1px 6px;border-radius:6px">🚨 Overdue</span>';
-    else if(ds==='soon')h+='<span style="font-size:9px;font-weight:700;background:var(--wn)18;color:var(--wn);padding:1px 6px;border-radius:6px">⏰ Due Soon</span>';
+    else if(ds==='soon')h+='<span style="font-size:9px;font-weight:700;background:#fdf0c8;color:var(--wn);padding:1px 6px;border-radius:6px">⏰ Due Soon</span>';
     h+='</div>';
     h+='<div class="mtg-card-title">'+esc(card.title||'Untitled')+'</div>';
-    h+='<div class="mtg-card-meta">';
+    if(blocked&&bd.length){const dep=S.cards[bd[0]];h+='<div style="font-size:10px;color:var(--dn);margin-bottom:4px;line-height:1.3">⏳ Waiting on: <em>'+esc(dep?dep.title:'deleted card')+'</em></div>';}
+    h+='<div class="mtg-card-meta" style="justify-content:space-between"><div style="display:flex;align-items:center;gap:5px">';
     if(card.due)h+='<span class="cdue d'+ds+'" style="font-size:9px">'+di+' '+fmtDate(card.due)+'</span>';
-    if(mems.length)h+='<div style="display:flex;align-items:center">'+mems.slice(0,3).map((m,i)=>'<div class="mav" style="background:'+m.color+';width:16px;height:16px;font-size:6px;margin-left:'+(i>0?'-4px':'0')+'">'+m.initials+'</div>').join('')+'</div>';
-    h+='</div></div>';return h;
+    if(prog)h+='<div class="clbar"><div class="cltrack"><div class="clfill" style="width:'+Math.round(prog.done/prog.total*100)+'%"></div></div><span style="font-size:9px;color:var(--mu)">'+prog.done+'/'+prog.total+'</span></div>';
+    h+='</div>';
+    if(mems.length)h+='<div style="display:flex;align-items:center">'+mems.slice(0,3).map((m,i)=>'<div class="mav" style="background:'+m.color+';width:18px;height:18px;font-size:7px;margin-left:'+(i>0?'-4px':'0')+'">'+m.initials+'</div>').join('')+(mems.length>3?'<div class="mav-x" style="width:18px;height:18px;font-size:7px;margin-left:-4px">+'+(mems.length-3)+'</div>':'')+'</div>';
+    h+='</div></div>';
+    return h;
   }
-  function sectionHTML(key,emoji,title,items){
-    const{map,order}=groupByBoard(items);
-    const cls='mtg-sect-'+{overdue:'ov',blocked:'bl',inprog:'ip',done:'dn'}[key];
-    let h='<div class="mtg-section '+cls+'" id="mtgsect-'+key+'">';
-    h+='<div class="mtg-section-hd"><span style="font-size:16px">'+emoji+'</span><span class="mtg-section-title">'+title+'</span><span class="mtg-section-count">'+items.length+'</span></div>';
-    h+='<div class="mtg-drop-zone" id="dz-'+key+'" ondragover="mtgDragOver(event,\''+key+'\')" ondragleave="mtgDragLeave(event,\''+key+'\')" ondrop="mtgDrop(event,\''+key+'\')"></div>';
-    if(!items.length){h+='<div style="text-align:center;padding:16px;color:var(--dm);font-size:11.5px;border:1.5px dashed var(--bd);border-radius:var(--rsm)">No cards — drag here to move</div>';}
-    else{order.forEach(bid=>{const board=S.boards[bid];h+='<div class="mtg-board-group"><div class="mtg-board-label">'+(board?board.icon+' '+esc(board.name):esc(bid))+'</div><div class="mtg-cards">';map[bid].forEach(x=>{h+=mtgCardHTML(x,key);});h+='</div></div>';});}
-    h+='</div>';return h;
-  }
-  function panelHTML(){
-    const cid=window._mtgSelCard;if(!cid||!S.cards[cid])return'<div class="mtg-panel hidden" id="mtgPanel"></div>';
-    const card=S.cards[cid];const bid=findBoard(cid);const colId=findCol(cid);const board=S.boards[bid];const mems=gcm(card);const prog=clProg(card.checklist);
-    const chip=BCHIPS[bid]||{l:bid,bg:'#eee',c:'#555'};const cols=board?board.columns:[];
-    const colOpts=cols.map(c=>'<option value="'+c.id+'"'+(c.id===colId?' selected':'')+'>'+esc(c.title.replace(/^\S+\s/,''))+'</option>').join('');
-    const commH=(card.comments||[]).slice(-5).map(c=>{const m=gm(c.memberId);const t=c.at?new Date(c.at).toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';return'<div style="background:var(--sf2);border-radius:var(--rxs);padding:7px 9px;border:1px solid var(--bd);margin-bottom:4px"><div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">'+(m?'<div class="mav" style="background:'+m.color+';width:15px;height:15px;font-size:6px;margin-left:0">'+m.initials+'</div><span style="font-size:10px;font-weight:600">'+esc(m.name)+'</span>':'<span style="font-size:10px;font-weight:600">Team member</span>')+'<span style="font-size:9px;color:var(--dm);margin-left:auto">'+t+'</span></div><div style="font-size:11.5px;line-height:1.4">'+esc(c.text)+'</div></div>';}).join('');
-    let h='<div class="mtg-panel" id="mtgPanel">';
-    h+='<div class="mtg-panel-hd"><div class="mtg-panel-title">'+esc(card.title||'Untitled')+'</div><button class="mx" onclick="mtgClosePanel()">✕</button></div>';
-    h+='<div class="mtg-panel-body">';
-    h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:9.5px;font-weight:700;background:'+chip.bg+';color:'+chip.c+';padding:2px 8px;border-radius:8px">'+chip.l+'</span><span style="font-size:9.5px;color:var(--dm);font-family:\'DM Mono\',monospace">'+cDID(cid)+'</span></div>';
-    h+='<div><div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Move to column</div><select class="mtg-status-select" onchange="mtgMoveCard(\''+cid+'\',this.value)">'+colOpts+'</select></div>';
-    if(card.due){const ds=dueStatus(card.due);const di=ds==='overdue'?'🚨':ds==='soon'?'⏰':'📅';h+='<div><span class="cdue d'+ds+'" style="font-size:11px">'+di+' '+fmtDate(card.due)+'</span></div>';}
-    if(mems.length)h+='<div><div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Assigned to</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+mems.map(m=>'<div style="display:flex;align-items:center;gap:4px"><div class="mav" style="background:'+m.color+';width:18px;height:18px;font-size:7px;margin-left:0">'+m.initials+'</div><span style="font-size:11px">'+esc(m.name)+'</span></div>').join('')+'</div></div>';
-    if(card.description)h+='<div><div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Description</div><div style="font-size:12px;line-height:1.5;color:var(--tx)">'+esc(card.description)+'</div></div>';
-    if(prog)h+='<div><div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Checklist</div><div class="clbar"><div class="cltrack"><div class="clfill" style="width:'+Math.round(prog.done/prog.total*100)+'%"></div></div><span style="font-size:11px;color:var(--mu)">'+prog.done+'/'+prog.total+' items done</span></div></div>';
-    h+='<div><div style="font-size:10px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Comments</div>';
-    h+=commH||'<div style="font-size:11px;color:var(--dm)">No comments yet.</div>';
-    h+='<div style="display:flex;gap:6px;margin-top:6px"><textarea id="mtgCommInput" placeholder="Add a comment..." style="flex:1;background:var(--sf2);border:1.5px solid var(--bd);border-radius:var(--rxs);color:var(--tx);font-family:\'DM Sans\',sans-serif;font-size:11.5px;padding:6px 9px;outline:none;resize:none;min-height:48px;line-height:1.4" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();mtgAddComment(\''+cid+'\');}"></textarea>';
-    h+='<button style="align-self:flex-end;background:var(--ac);color:#fff;border:none;border-radius:var(--rxs);padding:6px 10px;font-size:10.5px;font-weight:600;font-family:\'DM Sans\',sans-serif;cursor:pointer" onclick="mtgAddComment(\''+cid+'\')">Send</button></div></div>';
-    h+='</div><div class="mtg-panel-ft"><button class="btn btn-p btn-sm" onclick="mtgOpenFullCard(\''+cid+'\',\''+(bid||'')+'\')">Open Full Card →</button></div></div>';
+  function mtgColHTML(key,emoji,title,hdrBg,hdrColor,bodyBg,items){
+    let h='<div class="col exp" style="flex:0 0 272px">';
+    h+='<div style="padding:9px 11px;border-radius:var(--r) var(--r) 0 0;background:'+hdrBg+';color:'+hdrColor+';display:flex;align-items:center;gap:6px">';
+    h+='<span style="font-size:14px">'+emoji+'</span>';
+    h+='<span style="font-size:11.5px;font-weight:600;flex:1">'+title+'</span>';
+    h+='<span style="font-family:\'DM Mono\',monospace;font-size:9.5px;padding:1px 6px;border-radius:7px;background:rgba(0,0,0,.1)">'+items.length+'</span>';
+    h+='</div>';
+    h+='<div style="flex:1;overflow-y:auto;padding:7px;display:flex;flex-direction:column;gap:6px;min-height:200px;max-height:calc(100vh - 300px);background:'+bodyBg+';border-radius:0 0 var(--r) var(--r);"'
+      +' ondragover="mtgColDragOver(event,\''+key+'\')"'
+      +' ondragleave="mtgColDragLeave(event)"'
+      +' ondrop="mtgDrop(event,\''+key+'\')">';
+    if(!items.length){
+      h+='<div style="text-align:center;padding:24px 10px;color:var(--dm);font-size:11.5px;border:2px dashed var(--bd);border-radius:var(--rsm)">No cards</div>';
+    } else {
+      items.forEach(x=>{h+=mtgCardHTML(x,key);});
+    }
+    h+='</div></div>';
     return h;
   }
   const today=new Date();
   const totalCount=buckets.overdue.length+buckets.blocked.length+buckets.inprog.length+buckets.done.length;
-  let h='<div class="dash-area">';
-  h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">';
-  h+='<div><div style="font-size:18px;font-weight:700">📋 Meetings Board</div><div style="font-size:12px;color:var(--mu);margin-top:2px">'+today.toLocaleDateString("en-CA",{weekday:"long",year:"numeric",month:"long",day:"numeric"})+'</div></div>';
-  h+='<div style="display:flex;gap:7px;flex-wrap:wrap">';
+  let h='<div class="dash-area" style="padding-bottom:40px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">';
+  h+='<div><div style="font-size:18px;font-weight:700">📋 Meetings Board</div>';
+  h+='<div style="font-size:12px;color:var(--mu);margin-top:2px">'+today.toLocaleDateString("en-CA",{weekday:"long",year:"numeric",month:"long",day:"numeric"})+'</div></div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
   h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--dn-bg);color:var(--dn)">🚨 '+buckets.overdue.length+' Overdue</span>';
-  h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--dn-bg);color:var(--dn)">⛔ '+buckets.blocked.length+' Blocked</span>';
+  h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--oh);color:var(--ot)">⛔ '+buckets.blocked.length+' Blocked</span>';
   h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--ac-bg);color:var(--ac)">⚙️ '+buckets.inprog.length+' In Progress</span>';
   h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--ok-bg);color:var(--ok)">✅ '+buckets.done.length+' Done this week</span>';
   h+='</div></div>';
-  if(!totalCount){h+='<div style="text-align:center;padding:60px;color:var(--dm)"><div style="font-size:44px;margin-bottom:14px">✅</div><div style="font-size:16px;font-weight:600;margin-bottom:8px">All clear!</div><div style="font-size:12.5px">Nothing overdue, blocked, or in progress.</div></div>';}
-  else{
-    h+='<div class="mtg-wrap"><div class="mtg-main">';
-    h+=sectionHTML('overdue','🚨','Overdue',buckets.overdue);
-    h+=sectionHTML('blocked','⛔','Blocked',buckets.blocked);
-    h+=sectionHTML('inprog','⚙️','In Progress',buckets.inprog);
-    h+=sectionHTML('done','✅','Done This Week',buckets.done);
-    h+='</div>'+panelHTML()+'</div>';
+  if(!totalCount){
+    h+='<div style="text-align:center;padding:60px;color:var(--dm)"><div style="font-size:44px;margin-bottom:14px">✅</div><div style="font-size:16px;font-weight:600;margin-bottom:8px">All clear!</div><div style="font-size:12.5px">Nothing overdue, blocked, or in progress.</div></div>';
+  } else {
+    h+='<div class="board-outer"><div class="board-area" style="align-items:flex-start;padding:0;min-height:unset">';
+    h+=mtgColHTML('overdue','🚨','Overdue','var(--ph)','var(--pt)','var(--pb)',buckets.overdue);
+    h+=mtgColHTML('blocked','⛔','Blocked','var(--oh)','var(--ot)','var(--ob)',buckets.blocked);
+    h+=mtgColHTML('inprog','⚙️','In Progress','var(--gh)','var(--gt)','var(--gb)',buckets.inprog);
+    h+=mtgColHTML('done','✅','Done This Week','var(--bh)','var(--bt)','var(--bb)',buckets.done);
+    h+='</div></div>';
   }
-  h+='</div>';document.getElementById('dashContent').innerHTML=h;
-}
-function mtgSelectCard(cid,bid){window._mtgSelCard=cid;renderThursday();setTimeout(()=>{const el=document.getElementById('mtgc-'+cid);if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});},40);}
-function mtgClosePanel(){window._mtgSelCard=null;renderThursday();}
-function mtgOpenFullCard(cid,bid){window._mtgSelCard=null;goToCard(cid,bid);}
-function mtgMoveCard(cid,toColId){
-  const card=S.cards[cid];if(!card)return;
-  if(card&&isBlocked(card)){const lastBid=findBoard(cid);const lcid=lastColId(lastBid);if(toColId===lcid){showToast('⛔ Cannot move to Done — resolve dependencies first');renderThursday();return;}}
-  const srcCol=findCol(cid);if(!srcCol||srcCol===toColId)return;
-  card.history=card.history||[];
-  card.history.push({text:'Moved from '+getColTitle(srcCol)+' → '+getColTitle(toColId)+' by '+getMyName()+' · '+new Date().toLocaleDateString('en-CA',{month:'short',day:'numeric'}),at:new Date().toISOString()});
-  S.columns[srcCol]=(S.columns[srcCol]||[]).filter(id=>id!==cid);if(!S.columns[toColId])S.columns[toColId]=[];S.columns[toColId].push(cid);
-  save();renderThursday();showToast('Card moved ✓');
-}
-function mtgAddComment(cid){
-  const card=S.cards[cid];if(!card)return;const inp=document.getElementById('mtgCommInput');if(!inp)return;
-  const text=inp.value.trim();if(!text)return;card.comments=card.comments||[];const mid=currMid();
-  card.comments.push({text,memberId:mid,at:new Date().toISOString()});inp.value='';save();renderThursday();showToast('Comment added ✓');
+  h+='</div>';
+  document.getElementById('dashContent').innerHTML=h;
 }
 let _mtgDragCid=null,_mtgDragSect=null;
 function mtgDragStart(e,cid,sect){_mtgDragCid=cid;_mtgDragSect=sect;e.dataTransfer.effectAllowed='move';setTimeout(()=>{const el=document.getElementById('mtgc-'+cid);if(el)el.classList.add('dragging');},0);}
-function mtgDragEnd(e){if(_mtgDragCid){const el=document.getElementById('mtgc-'+_mtgDragCid);if(el)el.classList.remove('dragging');}document.querySelectorAll('.mtg-drop-zone').forEach(z=>z.classList.remove('drag-over'));_mtgDragCid=null;_mtgDragSect=null;}
-function mtgDragOver(e,sect){e.preventDefault();e.dataTransfer.dropEffect='move';const dz=document.getElementById('dz-'+sect);if(dz)dz.classList.add('drag-over');}
-function mtgDragLeave(e,sect){const dz=document.getElementById('dz-'+sect);if(dz)dz.classList.remove('drag-over');}
+function mtgDragEnd(e){if(_mtgDragCid){const el=document.getElementById('mtgc-'+_mtgDragCid);if(el)el.classList.remove('dragging');}_mtgDragCid=null;_mtgDragSect=null;}
+function mtgColDragOver(e,sect){e.preventDefault();e.dataTransfer.dropEffect='move';}
+function mtgColDragLeave(e){/* no-op */}
 function mtgDrop(e,toSect){
-  e.preventDefault();document.querySelectorAll('.mtg-drop-zone').forEach(z=>z.classList.remove('drag-over'));
+  e.preventDefault();
   if(!_mtgDragCid||_mtgDragSect===toSect)return;
-  const card=S.cards[_mtgDragCid];if(!card)return;const bid=findBoard(_mtgDragCid);const board=S.boards[bid];if(!board)return;
+  const card=S.cards[_mtgDragCid];if(!card)return;
+  const bid=findBoard(_mtgDragCid);const board=S.boards[bid];if(!board)return;
   const cols=board.columns;let targetCol=null;
   if(toSect==='done'){targetCol=cols[cols.length-1];}
   else if(toSect==='inprog'){targetCol=cols.find(c=>INPROG_COLS.has(c.id))||cols[Math.min(1,cols.length-1)];}
   else if(toSect==='blocked'||toSect==='overdue'){targetCol=cols.find(c=>c.id==='it-fix'||c.id==='ops-blocked'||c.id.includes('block')||c.id.includes('fix'))||cols[Math.min(2,cols.length-1)];}
-  if(!targetCol)return;mtgMoveCard(_mtgDragCid,targetCol.id);
+  if(!targetCol)return;
+  mtgMoveCard(_mtgDragCid,targetCol.id);
+}
+function mtgMoveCard(cid,toColId){
+  const card=S.cards[cid];if(!card)return;
+  if(isBlocked(card)){const bid=findBoard(cid);const lcid=lastColId(bid);if(toColId===lcid){showToast('⛔ Cannot move to Done — resolve dependencies first');return;}}
+  const srcCol=findCol(cid);if(!srcCol||srcCol===toColId)return;
+  card.history=card.history||[];
+  card.history.push({text:'Moved from '+getColTitle(srcCol)+' → '+getColTitle(toColId)+' by '+getMyName()+' · '+new Date().toLocaleDateString('en-CA',{month:'short',day:'numeric'}),at:new Date().toISOString()});
+  S.columns[srcCol]=(S.columns[srcCol]||[]).filter(id=>id!==cid);
+  if(!S.columns[toColId])S.columns[toColId]=[];
+  S.columns[toColId].push(cid);
+  save();renderThursday();showToast('Card moved ✓');
 }
 function openPov(id){document.getElementById(id).classList.remove('hidden');if(id==='teamPov'){renderTeamList();renderColorRow();}if(id==='newBoardPov'){renderEmojiGrid();document.getElementById('newBoardName').value='';}if(id==='profilePov')openProfile();if(id==='labelsPov')renderLabelsList();}
 function closePov(id){document.getElementById(id).classList.add('hidden');}
