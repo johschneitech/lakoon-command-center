@@ -1116,7 +1116,7 @@ function renderDashboard(){
   const area=document.getElementById('boardArea');if(!area)return;
   area.innerHTML='';area.style.cssText='width:100%;min-width:0;';
   const cA=dashTab==='cards'?' act':'',aA=dashTab==='analytics'?' act':'',tA=dashTab==='thursday'?' act':'';
-  area.innerHTML='<div style="padding:18px 18px 0"><div class="dtabs"><div class="dtab'+cA+'" onclick="setDashTab(\'cards\')">📋 Cards</div><div class="dtab'+aA+'" onclick="setDashTab(\'analytics\')">📊 Analytics</div><div class="dtab'+tA+'" onclick="setDashTab(\'thursday\')">📅 Thursday Meeting</div></div><div id="dashContent"></div></div>';
+  area.innerHTML='<div style="padding:18px 18px 0"><div class="dtabs"><div class="dtab'+cA+'" onclick="setDashTab(\'cards\')">📋 Cards</div><div class="dtab'+aA+'" onclick="setDashTab(\'analytics\')">📊 Analytics</div><div class="dtab'+tA+'" onclick="setDashTab(\'thursday\')">📅 Weekly Meeting</div></div><div id="dashContent"></div></div>';
   if(dashTab==='analytics')renderAnalytics();else if(dashTab==='thursday')renderThursday();else renderDashCards();
 }
 function setDashTab(tab){dashTab=tab;destroyCharts();renderDashboard();}
@@ -1184,31 +1184,115 @@ function renderAnalytics(){
 }
 // THURSDAY MEETING MODE
 function renderThursday(){
-  let h='<div class="dash-area"><div class="thurs-mode">';
-  h+='<div class="thurs-title">📅 Thursday Meeting View</div>';
-  h+='<div class="thurs-sub">Cards currently In Progress or Blocked across all boards — your weekly review focus.</div>';
+  // Gather all cards into 4 buckets: overdue, blocked, inprogress, done-this-week
+  const now=new Date();now.setHours(0,0,0,0);
+  const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);
   const FOCUS_COLS=new Set([...INPROG_COLS,...['it-fix','ops-blocked']]);
-  let hasAny=false;
+  const buckets={overdue:[],blocked:[],inprog:[],done:[]};
+
   for(const[bid,board]of Object.entries(S.boards||{})){
-    const focusCards=[];for(const col of board.columns){if(!FOCUS_COLS.has(col.id))continue;for(const cid of(S.columns[col.id]||[])){const card=S.cards[cid];if(!card)continue;focusCards.push({cid,card,col});}}
-    if(!focusCards.length)continue;hasAny=true;
-    h+='<div class="thurs-board"><div class="thurs-board-title">'+board.icon+' '+esc(board.name)+'</div><div class="thurs-cards">';
-    focusCards.forEach(({cid,card,col})=>{
-      const ds=dueStatus(card.due);const di=ds==='overdue'?'🚨':ds==='soon'?'⏰':'📅';const mems=gcm(card);const blocked=isBlocked(card);const prog=clProg(card.checklist);
-      h+='<div class="thurs-card'+(blocked?' blocked-tc':' progress-tc')+'" onclick="goToCard(\''+cid+'\',\''+bid+'\')">';
-      h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="font-size:9.5px;font-weight:600;background:'+(blocked?'var(--dn-bg)':'var(--ac-bg)')+';color:'+(blocked?'var(--dn)':'var(--ac)')+';padding:2px 7px;border-radius:8px">'+(blocked?'⛔ Blocked':'⚙️ '+getColTitle(col.id))+'</span></div>';
-      h+='<div style="font-size:12.5px;font-weight:500;margin-bottom:5px">'+esc(card.title||'Untitled')+'</div>';
-      if(card.due)h+='<div class="cdue d'+ds+'" style="font-size:9.5px;margin-bottom:4px">'+di+' '+fmtDate(card.due)+'</div>';
-      if(prog)h+='<div class="clbar" style="margin-bottom:4px"><div class="cltrack"><div class="clfill" style="width:'+Math.round(prog.done/prog.total*100)+'%"></div></div>'+prog.done+'/'+prog.total+' checklist items</div>';
-      if(mems.length)h+='<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px">'+mems.map(m=>'<div style="display:flex;align-items:center;gap:4px;font-size:10.5px"><div class="mav" style="background:'+m.color+';width:18px;height:18px;font-size:7px;margin-left:0">'+m.initials+'</div>'+esc(m.name)+'</div>').join('')+'</div>';
-      h+='</div>';
-    });
-    h+='</div></div>';
+    for(const col of board.columns){
+      for(const cid of(S.columns[col.id]||[])){
+        const card=S.cards[cid];if(!card)continue;
+        const ds=dueStatus(card.due);
+        const done=isDone(cid);
+        const blocked=isBlocked(card);
+        const inFocus=FOCUS_COLS.has(col.id);
+        // Done this week
+        if(done){
+          const hist=(card.history||[]).filter(h=>h.text&&h.text.includes('→')&&h.at);
+          const lastMove=hist.length?new Date(hist[hist.length-1].at):null;
+          if(lastMove&&lastMove>=weekAgo)buckets.done.push({cid,card,bid,col,ds});
+          continue;
+        }
+        if(!inFocus&&!blocked&&ds!=='overdue')continue;
+        if(ds==='overdue')buckets.overdue.push({cid,card,bid,col,ds});
+        else if(blocked)buckets.blocked.push({cid,card,bid,col,ds});
+        else if(inFocus)buckets.inprog.push({cid,card,bid,col,ds});
+      }
+    }
   }
-  if(!hasAny)h+='<div style="text-align:center;padding:40px;color:var(--dm)"><div style="font-size:40px;margin-bottom:12px">✅</div><div style="font-size:16px;font-weight:600;margin-bottom:8px">All clear!</div><div style="font-size:12.5px">No cards are currently In Progress or Blocked.</div></div>';
+
+  function meetCard(x,statusLabel,statusBg,statusColor,borderColor){
+    const {cid,card,bid,col,ds}=x;
+    const mems=gcm(card);const prog=clProg(card.checklist);
+    const chip=BCHIPS[bid]||{l:bid,bg:'#eee',c:'#555'};
+    const di=ds==='overdue'?'🚨':ds==='soon'?'⏰':ds==='ok'?'📅':'';
+    let h='<div class="thurs-card" style="border-left:3px solid '+borderColor+';cursor:pointer" onclick="goToCard(\''+cid+'\',\''+bid+'\')">';
+    // top row: status badge + board badge
+    h+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">';
+    h+='<span style="font-size:9.5px;font-weight:700;background:'+statusBg+';color:'+statusColor+';padding:2px 8px;border-radius:8px">'+statusLabel+'</span>';
+    h+='<span style="font-size:9px;font-weight:600;background:'+chip.bg+';color:'+chip.c+';padding:2px 6px;border-radius:6px">'+chip.l+'</span>';
+    h+='</div>';
+    // title
+    h+='<div style="font-size:12.5px;font-weight:500;margin-bottom:6px;line-height:1.4">'+esc(card.title||'Untitled')+'</div>';
+    // due date
+    if(card.due)h+='<div style="margin-bottom:5px"><span class="cdue d'+ds+'" style="font-size:9.5px">'+di+' '+fmtDate(card.due)+'</span></div>';
+    else h+='<div style="font-size:9.5px;color:var(--dm);margin-bottom:5px">No due date set</div>';
+    // checklist progress
+    if(prog)h+='<div class="clbar" style="margin-bottom:5px"><div class="cltrack"><div class="clfill" style="width:'+Math.round(prog.done/prog.total*100)+'%"></div></div><span style="font-size:9px;color:var(--mu)">'+prog.done+'/'+prog.total+' checklist</span></div>';
+    // blocked deps
+    const bd=bDeps(card);
+    if(bd.length){const names=bd.map(d=>'"'+(S.cards[d]?esc(S.cards[d].title):'Deleted')+'"').join(', ');h+='<div style="font-size:9.5px;color:var(--dn);margin-bottom:5px">⛔ Waiting on: '+names+'</div>';}
+    // assignees
+    if(mems.length)h+='<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:4px">'+mems.map(m=>'<div style="display:flex;align-items:center;gap:4px"><div class="mav" style="background:'+m.color+';width:18px;height:18px;font-size:7px;margin-left:0">'+m.initials+'</div><span style="font-size:10.5px">'+esc(m.name)+'</span></div>').join('')+'</div>';
+    else h+='<div style="font-size:9.5px;color:var(--dm);margin-top:4px">Unassigned</div>';
+    h+='</div>';
+    return h;
+  }
+
+  function section(emoji,title,subtitle,items,statusLabel,statusBgFn,statusColorFn,borderFn){
+    if(!items.length)return'';
+    let h='<div style="margin-bottom:28px">';
+    h+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--bd)">';
+    h+='<span style="font-size:18px">'+emoji+'</span>';
+    h+='<div><div style="font-size:14px;font-weight:700">'+title+'</div>';
+    h+='<div style="font-size:11px;color:var(--mu)">'+subtitle+'</div></div>';
+    h+='<span style="margin-left:auto;font-size:10px;font-weight:700;font-family:DM Mono,monospace;background:var(--sf2);padding:2px 8px;border-radius:9px">'+items.length+'</span>';
+    h+='</div>';
+    h+='<div class="thurs-cards">';
+    items.forEach(x=>h+=meetCard(x,statusLabel(x),statusBgFn(x),statusColorFn(x),borderFn(x)));
+    h+='</div></div>';
+    return h;
+  }
+
+  const today=new Date();today.setHours(0,0,0,0);
+  let h='<div class="dash-area"><div class="thurs-mode">';
+  h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">';
+  h+='<div><div class="thurs-title">📅 Weekly Meeting</div>';
+  h+='<div class="thurs-sub">'+today.toLocaleDateString("en-CA",{weekday:"long",year:"numeric",month:"long",day:"numeric"})+'</div></div>';
+  const totalAction=buckets.overdue.length+buckets.blocked.length+buckets.inprog.length;
+  h+='<div style="display:flex;gap:9px;flex-wrap:wrap">';
+  h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--dn-bg);color:var(--dn)">🚨 '+buckets.overdue.length+' Overdue</span>';
+  h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--dn-bg);color:var(--dn)">⛔ '+buckets.blocked.length+' Blocked</span>';
+  h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--ac-bg);color:var(--ac)">⚙️ '+buckets.inprog.length+' In Progress</span>';
+  h+='<span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:14px;background:var(--ok-bg);color:var(--ok)">✅ '+buckets.done.length+' Done this week</span>';
+  h+='</div></div>';
+
+  const hasAnything=buckets.overdue.length||buckets.blocked.length||buckets.inprog.length||buckets.done.length;
+  if(!hasAnything){
+    h+='<div style="text-align:center;padding:50px;color:var(--dm)"><div style="font-size:44px;margin-bottom:14px">✅</div><div style="font-size:16px;font-weight:600;margin-bottom:8px">All clear!</div><div style="font-size:12.5px">Nothing overdue, blocked, or in progress right now.</div></div>';
+  } else {
+    h+=section('🚨','Overdue','These are past their due date — address first',
+      buckets.overdue,
+      ()=>'🚨 Overdue',()=>'var(--dn-bg)',()=>'var(--dn)',()=>'var(--dn)');
+    h+=section('⛔','Blocked','Cannot move forward — what is needed to unblock these?',
+      buckets.blocked,
+      ()=>'⛔ Blocked',()=>'var(--dn-bg)',()=>'var(--dn)',()=>'var(--dn)');
+    h+=section('⚙️','In Progress','Currently being worked on',
+      buckets.inprog,
+      x=>x.ds==='overdue'?'🚨 Overdue':x.ds==='soon'?'⏰ Due Soon':'⚙️ On Track',
+      x=>x.ds==='overdue'?'var(--dn-bg)':x.ds==='soon'?'var(--wn)'+'18':'var(--ac-bg)',
+      x=>x.ds==='overdue'?'var(--dn)':x.ds==='soon'?'var(--wn)':'var(--ac)',
+      x=>x.ds==='overdue'?'var(--dn)':x.ds==='soon'?'var(--wn)':'var(--ac)');
+    h+=section('✅','Done This Week','Completed in the last 7 days — confirm checklist is complete',
+      buckets.done,
+      ()=>'✅ Done',()=>'var(--ok-bg)',()=>'var(--ok)',()=>'var(--ok)');
+  }
   h+='</div></div>';
   document.getElementById('dashContent').innerHTML=h;
 }
+
 // TEAM
 function openPov(id){document.getElementById(id).classList.remove('hidden');if(id==='teamPov'){renderTeamList();renderColorRow();}if(id==='newBoardPov'){renderEmojiGrid();document.getElementById('newBoardName').value='';}if(id==='profilePov')openProfile();}
 function closePov(id){document.getElementById(id).classList.add('hidden');}
