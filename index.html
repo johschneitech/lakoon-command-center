@@ -596,10 +596,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
 <div class="toast hidden" id="toast"></div>
 
 <script>
-// ── GUARD: prevent double-execution if page is cached and script runs twice ──
-if (typeof window.__LAKOON_INIT__ === 'undefined') {
-window.__LAKOON_INIT__ = true;
-
 const SB='https://amizppesokbocznttruc.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtaXpwcGVzb2tib2N6bnR0cnVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Mjg5NzIsImV4cCI6MjA5MDIwNDk3Mn0.8xfT1IFYrhkQKZnbOHMnXzKV1GGhKyJbD99oKLSVWdo';
 const AVC=['#4361ee','#2a9d5c','#e63946','#e8a020','#7b2d8b','#0a9396','#e76f51','#457b9d','#c77dff','#06d6a0','#ef476f','#118ab2'];
@@ -1327,8 +1323,6 @@ document.addEventListener('keydown',e=>{
 });
 document.getElementById('newMemberName').addEventListener('keydown',e=>{if(e.key==='Enter')addMember();});
 checkSession();
-
-} // end __LAKOON_INIT__ guard
 </script>
 </body>
 </html>
