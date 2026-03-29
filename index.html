@@ -475,7 +475,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
       <button class="tbtn" onclick="toggleNotif()" style="position:relative">🔔<span class="ndot" id="notifDot"></span></button>
       <button class="tbtn" onclick="openPanel('archivePanel')">📦 Archive</button>
       <button class="tbtn" onclick="openPov('teamPov')">👥 Team</button>
-      <button class="tbtn" onclick="openInviteFlow()">✉️ Invite</button>
+      <button class="tbtn" onclick="openInviteFlow(event)">✉️ Invite</button>
       <button class="tbtn" onclick="exportCSV()" title="Export current sprint to CSV">📊 Export</button>
       <button class="tbtn acc" onclick="openPov('newBoardPov')">＋ New Board</button>
       <button class="tbtn" onclick="openPov('profilePov')" id="profileBtn">👤 <span id="topbarName"></span></button>
@@ -906,9 +906,8 @@ function createCard(colId){
   const id=uid(S.activeBoard);const isFB=S.activeBoard==='feedback';
   S.cards[id]={title:'',labels:[],due:'',members:[],description:'',deps:[],images:[],sprint:'backlog',comments:[],history:[],checklist:getBoardCL(S.activeBoard),...(isFB?{feedbackType:'',severity:'',relatedBoard:'',steps:'',suggestedFix:''}:{})};
   if(!S.columns[colId])S.columns[colId]=[];S.columns[colId].push(id);save();
-  const body=document.getElementById('body-'+colId);
-  if(body){const empty=body.querySelector('.empty-col');if(empty)empty.remove();body.insertAdjacentHTML('beforeend',renderCard(id));const colEl=document.getElementById('col-'+colId);if(colEl){const cnt=colEl.querySelector('.col-count');if(cnt)cnt.textContent=S.columns[colId].length;}}
-  renderNav();openCard(id);
+  renderBoard();renderNav();
+  setTimeout(()=>openCard(id),50);
 }
 function openCard(cid){
   editCardId=cid;const card=S.cards[cid];if(!card){showToast('Card not found');return;}
@@ -1061,7 +1060,7 @@ function exportCSV(){
   const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='lakoon_cards_'+new Date().toISOString().slice(0,10)+'.csv';a.click();showToast('CSV exported ✓');
 }
-function openInviteFlow(){document.getElementById('inviteErr').style.display='none';document.getElementById('inviteOk').style.display='none';document.getElementById('invEmail').value='';document.getElementById('inviteOverlay').classList.remove('hidden');}
+function openInviteFlow(e){if(e)e.stopPropagation();document.getElementById('inviteErr').style.display='none';document.getElementById('inviteOk').style.display='none';document.getElementById('invEmail').value='';document.getElementById('inviteOverlay').classList.remove('hidden');}
 function closeInvite(){document.getElementById('inviteOverlay').classList.add('hidden');}
 async function sendInvite(){
   const email=document.getElementById('invEmail').value.trim();
