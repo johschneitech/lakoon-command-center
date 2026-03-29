@@ -476,7 +476,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
       <button class="tbtn" onclick="openPanel('archivePanel')">📦 Archive</button>
       <button class="tbtn" onclick="openPov('teamPov')">👥 Team</button>
       <button class="tbtn" onclick="openInviteFlow(event)">✉️ Invite</button>
-      <button class="tbtn" onclick="exportCSV()" title="Export current sprint to CSV">📊 Export</button>
+      <button class="tbtn" onclick="exportCSV()" title="Export to CSV">📊 Export</button>
+      <button class="tbtn" onclick="openUploadCSV(event)" title="Upload CSV to Backlog">📥 Import CSV</button>
+      <button class="tbtn" onclick="openPov('labelsPov')">🏷️ Labels</button>
       <button class="tbtn acc" onclick="openPov('newBoardPov')">＋ New Board</button>
       <button class="tbtn" onclick="openPov('profilePov')" id="profileBtn">👤 <span id="topbarName"></span></button>
       <button class="tbtn red" onclick="doSignOut()">Sign Out</button>
@@ -494,7 +496,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
   <div class="modal" id="cardModal">
     <div class="modal-hd">
       <div style="flex:1">
-        <textarea class="modal-title" id="modalTitle" rows="1" placeholder="Card title..." oninput="onTitleInput()"></textarea>
+        <textarea class="modal-title" id="modalTitle" rows="1" placeholder="Card title..." oninput="onTitleInput()" onkeydown="if(event.key==='Enter'){event.preventDefault();}"></textarea>
         <div id="titleWarning" style="display:none;font-size:11px;color:var(--dn);margin-top:4px;font-weight:500">⚠️ Please add a title before your changes are saved.</div>
       </div>
       <button class="mx" onclick="closeModal()">✕</button>
@@ -541,7 +543,57 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
     </div>
   </div>
 </div>
-<!-- ARCHIVE PANEL -->
+<!-- LABELS POV -->
+<div class="pov hidden" id="labelsPov">
+  <div class="povbox" style="width:460px;max-width:95vw">
+    <div class="povhd"><h3>🏷️ Manage Labels</h3><button class="mx" onclick="closePov('labelsPov')">✕</button></div>
+    <div class="povbody">
+      <div id="labelsList" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;margin-bottom:10px"></div>
+      <div style="font-size:10.5px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Add New Label</div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <input class="mi" id="newLabelName" placeholder="Label name..." maxlength="30" style="flex:1;min-width:120px">
+        <input type="color" id="newLabelColor" value="#4361ee" style="width:36px;height:36px;border:1.5px solid var(--bd);border-radius:var(--rxs);cursor:pointer;padding:2px;background:var(--sf)">
+        <button class="btn btn-p btn-sm" onclick="addLabel()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- CSV UPLOAD MODAL -->
+<div class="mo hidden" id="csvUploadOverlay">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-hd">
+      <div style="font-size:15px;font-weight:600;flex:1">📥 Import CSV to Backlog</div>
+      <button class="mx" onclick="closeUploadCSV()">✕</button>
+    </div>
+    <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+      <div style="background:var(--sf2);border:1.5px solid var(--bd);border-radius:var(--rsm);padding:12px 14px">
+        <div style="font-size:10.5px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Expected CSV columns</div>
+        <div style="font-size:11.5px;color:var(--mu);line-height:1.7">Title <span style="color:var(--dn);font-weight:600">*required</span> · Description · Labels · Due Date · Assignee<br>Missing columns are skipped. Rows without a Title are skipped.</div>
+      </div>
+      <div>
+        <label class="llbl">Select Target Board</label>
+        <select class="mi" id="csvTargetBoard" style="cursor:pointer"></select>
+      </div>
+      <div class="img-ua" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()" ondragover="event.preventDefault();this.style.borderColor='var(--ac)'" ondragleave="this.style.borderColor=''" ondrop="onCSVDrop(event)">
+        <input type="file" id="csvFileInput" accept=".csv,text/csv" style="display:none" onchange="onCSVFile(event)">
+        <div style="font-size:13px;margin-bottom:6px">📄</div>
+        <div style="font-size:12px;color:var(--mu)">Click to choose a CSV file or drag and drop here</div>
+      </div>
+      <div id="csvPreview" style="display:none">
+        <div style="font-size:10.5px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Preview</div>
+        <div id="csvPreviewList" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+      <div id="csvErr" class="lerr" style="display:none"></div>
+    </div>
+    <div class="modal-ft">
+      <div id="csvCount" style="font-size:11.5px;color:var(--mu)"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-g btn-sm" onclick="closeUploadCSV()">Cancel</button>
+        <button class="btn btn-p btn-sm" id="csvImportBtn" onclick="doImportCSV()" style="display:none">Import Cards</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="panel" id="archivePanel">
   <div class="phd"><h3>📦 Archive</h3><button class="mx" onclick="closePanel('archivePanel')">✕</button></div>
   <div class="psr"><input id="archiveSearch" placeholder="Search archived cards..." oninput="renderArchive()"></div>
@@ -603,7 +655,7 @@ const EMOJIS=['📋','🚀','⚙️','📣','⚖️','💰','🏠','📊','🌍'
 const THEMES=['grey','green','pink','yellow','orange','blue','purple','teal'];
 const TC={grey:'#5a6080',green:'#0e6030',pink:'#a02030',yellow:'#806000',orange:'#904010',blue:'#0a3a8a',purple:'#5a0a9a',teal:'#004a6a'};
 const TBG={grey:'#e8eaf4',green:'#d8f5e8',pink:'#fdd8de',yellow:'#fdf0c8',orange:'#fde0c8',blue:'#d8ecfe',purple:'#ecd8fc',teal:'#d4f2fc'};
-const LBLS=[
+let LBLS=[
   {id:'urgent',n:'Urgent',c:'#e63946'},{id:'high',n:'High Priority',c:'#f97316'},
   {id:'medium',n:'Medium',c:'#0891b2'},{id:'low',n:'Low Priority',c:'#2a9d5c'},
   {id:'it',n:'IT/Tech',c:'#2980b9'},{id:'compliance',n:'Compliance',c:'#7b2d8b'},
@@ -645,7 +697,7 @@ const DEFAULT_BOARDS={
 const DEF_IDS=new Set(Object.keys(DEFAULT_BOARDS));
 const DONE_COLS=new Set(['it-done','mkt-launched','ops-live','cmp-confirmed','fb-resolved']);
 const INPROG_COLS=new Set(['it-progress','it-testing','mkt-progress','mkt-approval','mkt-revision','ops-progress','ops-approval','cmp-research','cmp-clarify','cmp-signoff','fb-review','fb-progress','fb-testing']);
-let S={activeBoard:'it',cards:{},columns:{},boards:{},members:[],minimized:{},archived:[],notifications:[],seenCards:{},cardCounters:{},filters:{member:null,label:null,due:null,sprint:null}};
+let S={activeBoard:'it',cards:{},columns:{},boards:{},members:[],minimized:{},archived:[],notifications:[],seenCards:{},cardCounters:{},labels:[],filters:{member:null,label:null,due:null,sprint:null}};
 let cUser=null,cSess=null,syncTimer=null,isSyncing=false,lastSync=null;
 let toastTimer=null,editCardId=null,dragCardId=null,dragSrcCol=null;
 let selColor=AVC[0],newBoardEmoji='📋',newColTheme='grey',dashTab='analytics',chartInst={};
@@ -711,6 +763,8 @@ async function loadSB(){
       S.cards=r.cards||{};S.columns=r.columns||{};S.members=r.members||[];
       S.minimized=r.minimized||{};S.archived=r.archived||[];
       S.notifications=r.notifications||[];S.seenCards=r.seenCards||{};S.cardCounters=r.cardCounters||{};
+      S.labels=r.labels||[];
+      if(S.labels.length)LBLS=S.labels;
       S.boards={};for(const[id,b]of Object.entries(r.boards||{}))S.boards[id]={...b};
       S.activeBoard=(r.activeBoard&&S.boards[r.activeBoard])?r.activeBoard:'it';
     }
@@ -724,7 +778,7 @@ async function loadSB(){
 async function saveSB(){
   if(isSyncing)return;isSyncing=true;showSync('saving');
   try{
-    const payload={id:'main',data:{cards:S.cards,columns:S.columns,boards:S.boards,members:S.members,minimized:S.minimized,archived:S.archived,activeBoard:S.activeBoard,notifications:S.notifications,seenCards:S.seenCards,cardCounters:S.cardCounters},updated_at:new Date().toISOString()};
+    const payload={id:'main',data:{cards:S.cards,columns:S.columns,boards:S.boards,members:S.members,minimized:S.minimized,archived:S.archived,activeBoard:S.activeBoard,notifications:S.notifications,seenCards:S.seenCards,cardCounters:S.cardCounters,labels:LBLS},updated_at:new Date().toISOString()};
     const res=await sbFetch('/rest/v1/state?id=eq.main','POST',payload,cSess?.access_token||SK);
     if(res.ok||[200,201,204].includes(res.status)){lastSync=new Date();showSync('ok');}
     else throw new Error('Status '+res.status);
@@ -1098,10 +1152,149 @@ function restoreCard(idx){const a=S.archived[idx];if(!a)return;let col=a.fromCol
 function onSearch(){const q=document.getElementById('searchInput').value.toLowerCase().trim();const drop=document.getElementById('searchDrop');if(!q){drop.classList.remove('open');return;}const matches=[];for(const[id,card]of Object.entries(S.cards)){if(!card.title||!card.title.toLowerCase().includes(q))continue;const bid=findBoard(id),colId=findCol(id);matches.push({id,card,bid,colId});}if(!matches.length){drop.innerHTML='<div style="padding:20px;text-align:center;color:var(--dm)">No cards found</div>';drop.classList.add('open');return;}const chip=bid=>BCHIPS[bid]||{l:bid,bg:'#eee',c:'#555'};drop.innerHTML=matches.slice(0,12).map(({id,card,bid,colId})=>'<div class="si" onclick="goSearchCard(\''+id+'\',\''+(bid||'')+'\')">'+'<div class="si-title">'+esc(card.title)+'</div><span style="font-size:9.5px;font-weight:600;padding:2px 6px;border-radius:6px;background:'+chip(bid).bg+';color:'+chip(bid).c+'">'+chip(bid).l+'</span><span style="font-size:10px;color:var(--mu)">'+esc(colId?getColTitle(colId):'')+'</span></div>').join('');drop.classList.add('open');}
 function goSearchCard(cid,bid){document.getElementById('searchInput').value='';document.getElementById('searchDrop').classList.remove('open');if(bid&&bid!==S.activeBoard){S.activeBoard=bid;render();}setTimeout(()=>openCard(cid),50);}
 function exportCSV(){
-  const rows=[['Card ID','Title','Board','Column','Sprint','Assignees','Due Date','Status','Labels']];
-  for(const[bid,board]of Object.entries(S.boards||{})){for(const col of board.columns){for(const cid of(S.columns[col.id]||[])){const card=S.cards[cid];if(!card)continue;const mems=gcm(card).map(m=>m.name).join('; ');const status=cardStatus(cid)==='dn'?'Done':cardStatus(cid)==='ip'?'In Progress':cardStatus(cid)==='bl'?'Blocked':'Not Started';rows.push([cDID(cid),card.title||'',board.name,getColTitle(col.id),card.sprint||'backlog',mems,card.due||'',status,(card.labels||[]).join('; ')]);}}};
+  const rows=[['Card ID','Title','Board','Column','Sprint','Assignees','Due Date','Status','Labels','Description','Comments']];
+  for(const[bid,board]of Object.entries(S.boards||{})){for(const col of board.columns){for(const cid of(S.columns[col.id]||[])){const card=S.cards[cid];if(!card)continue;
+    const mems=gcm(card).map(m=>m.name).join('; ');
+    const status=cardStatus(cid)==='dn'?'Done':cardStatus(cid)==='ip'?'In Progress':cardStatus(cid)==='bl'?'Blocked':'Not Started';
+    const labelNames=(card.labels||[]).map(lid=>{const l=LBLS.find(x=>x.id===lid);return l?l.n:lid;}).join('; ');
+    const comments=(card.comments||[]).map(c=>c.text).join(' | ');
+    rows.push([cDID(cid),card.title||'',board.name,getColTitle(col.id),card.sprint||'backlog',mems,card.due||'',status,labelNames,card.description||'',comments]);}}};
   const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='lakoon_cards_'+new Date().toISOString().slice(0,10)+'.csv';a.click();showToast('CSV exported ✓');
+}
+// LABELS MANAGEMENT
+function openPovLabels(){renderLabelsList();openPov('labelsPov');}
+function renderLabelsList(){
+  const list=document.getElementById('labelsList');if(!list)return;
+  if(!LBLS.length){list.innerHTML='<div style="text-align:center;padding:16px;color:var(--dm);font-size:12px">No labels yet.</div>';return;}
+  list.innerHTML=LBLS.map((lbl,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--sf2);border:1.5px solid var(--bd);border-radius:var(--rsm)">
+      <div style="width:18px;height:18px;border-radius:50%;background:${lbl.c};flex-shrink:0"></div>
+      <input value="${esc(lbl.n)}" maxlength="30" onchange="renameLbl(${i},this.value)" style="flex:1;background:none;border:none;outline:none;font-size:12.5px;font-family:'DM Sans',sans-serif;color:var(--tx)">
+      <input type="color" value="${lbl.c}" onchange="recolorLbl(${i},this.value)" style="width:28px;height:28px;border:1.5px solid var(--bd);border-radius:4px;cursor:pointer;padding:1px;background:var(--sf)">
+      <button onclick="deleteLbl(${i})" style="background:none;border:none;color:var(--dm);cursor:pointer;font-size:13px;padding:2px 4px" title="Delete label">🗑</button>
+    </div>`).join('');
+}
+function renameLbl(i,val){if(!val.trim())return;LBLS[i].n=val.trim();save();showToast('Label renamed ✓');}
+function recolorLbl(i,val){LBLS[i].c=val;renderLabelsList();save();showToast('Label color updated ✓');}
+function deleteLbl(i){
+  const lbl=LBLS[i];if(!confirm('Delete label "'+lbl.n+'"? It will be removed from all cards.'))return;
+  const id=lbl.id;LBLS.splice(i,1);
+  Object.values(S.cards).forEach(c=>{c.labels=(c.labels||[]).filter(l=>l!==id);});
+  save();renderLabelsList();render();showToast('Label deleted ✓');
+}
+function addLabel(){
+  const name=document.getElementById('newLabelName').value.trim();
+  const color=document.getElementById('newLabelColor').value;
+  if(!name){showToast('⚠️ Enter a label name');return;}
+  if(LBLS.find(l=>l.n.toLowerCase()===name.toLowerCase())){showToast('⚠️ Label already exists');return;}
+  const id='lbl_'+Date.now();LBLS.push({id,n:name,c:color});
+  document.getElementById('newLabelName').value='';
+  save();renderLabelsList();showToast('"'+name+'" label added ✓');
+}
+// CSV IMPORT
+let csvParsed=[];
+function openUploadCSV(e){
+  if(e)e.stopPropagation();
+  csvParsed=[];
+  // populate board select
+  const sel=document.getElementById('csvTargetBoard');
+  sel.innerHTML=Object.entries(S.boards).map(([id,b])=>'<option value="'+id+'">'+b.icon+' '+esc(b.name)+'</option>').join('');
+  // reset UI
+  document.getElementById('csvPreview').style.display='none';
+  document.getElementById('csvErr').style.display='none';
+  document.getElementById('csvCount').textContent='';
+  document.getElementById('csvImportBtn').style.display='none';
+  document.getElementById('csvFileInput').value='';
+  document.getElementById('csvUploadOverlay').classList.remove('hidden');
+}
+function closeUploadCSV(){document.getElementById('csvUploadOverlay').classList.add('hidden');csvParsed=[];}
+function onCSVDrop(e){
+  e.preventDefault();document.getElementById('csvDropZone').style.borderColor='';
+  const file=e.dataTransfer.files[0];if(file)parseCSVFile(file);
+}
+function onCSVFile(e){const file=e.target.files[0];if(file)parseCSVFile(file);}
+function parseCSVFile(file){
+  const err=document.getElementById('csvErr');err.style.display='none';
+  if(!file.name.match(/\.csv$/i)){err.textContent='Please upload a .csv file.';err.style.display='block';return;}
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const text=ev.target.result;
+      const lines=text.split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length<2){err.textContent='CSV must have a header row and at least one data row.';err.style.display='block';return;}
+      // parse header
+      const headers=parseCSVRow(lines[0]).map(h=>h.trim().toLowerCase());
+      const colMap={};
+      ['title','description','labels','due date','assignee'].forEach(col=>{
+        const idx=headers.indexOf(col);if(idx>=0)colMap[col]=idx;
+      });
+      if(colMap['title']===undefined){err.textContent='CSV must have a "Title" column.';err.style.display='block';return;}
+      // parse rows
+      csvParsed=[];
+      for(let i=1;i<lines.length;i++){
+        const row=parseCSVRow(lines[i]);
+        const title=(row[colMap['title']]||'').trim();
+        if(!title)continue; // skip rows without title
+        const desc=(colMap['description']!==undefined?row[colMap['description']]||'':'').trim();
+        const labelsRaw=(colMap['labels']!==undefined?row[colMap['labels']]||'':'').trim();
+        const due=(colMap['due date']!==undefined?row[colMap['due date']]||'':'').trim();
+        const assigneeRaw=(colMap['assignee']!==undefined?row[colMap['assignee']]||'':'').trim();
+        // map label names to ids
+        const labelIds=labelsRaw?labelsRaw.split(/[,;]/).map(ln=>{
+          const found=LBLS.find(l=>l.n.toLowerCase()===ln.trim().toLowerCase());
+          return found?found.id:null;
+        }).filter(Boolean):[];
+        // map assignee name to member id
+        const member=assigneeRaw?S.members.find(m=>m.name.toLowerCase()===assigneeRaw.toLowerCase()):null;
+        csvParsed.push({title,desc,labelIds,due,memberId:member?member.id:null});
+      }
+      // show preview
+      const prev=document.getElementById('csvPreview');
+      const prevList=document.getElementById('csvPreviewList');
+      prevList.innerHTML=csvParsed.slice(0,8).map(r=>`
+        <div style="padding:7px 10px;background:var(--sf2);border:1.5px solid var(--bd);border-radius:var(--rxs);font-size:12px">
+          <div style="font-weight:500">${esc(r.title)}</div>
+          ${r.desc?'<div style="font-size:10.5px;color:var(--mu);margin-top:2px">'+esc(r.desc.slice(0,60))+(r.desc.length>60?'...':'')+'</div>':''}
+        </div>`).join('')+(csvParsed.length>8?'<div style="font-size:11px;color:var(--mu);padding:6px 0;text-align:center">...and '+(csvParsed.length-8)+' more rows</div>':'');
+      prev.style.display='block';
+      document.getElementById('csvCount').textContent=csvParsed.length+' card'+(csvParsed.length!==1?'s':'')+' ready to import';
+      document.getElementById('csvImportBtn').style.display='block';
+    }catch(ex){err.textContent='Error reading CSV: '+ex.message;err.style.display='block';}
+  };
+  reader.readAsText(file);
+}
+function parseCSVRow(row){
+  const result=[];let cur='';let inQ=false;
+  for(let i=0;i<row.length;i++){
+    const ch=row[i];
+    if(ch==='"'){if(inQ&&row[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+    else if(ch===','&&!inQ){result.push(cur);cur='';}
+    else cur+=ch;
+  }
+  result.push(cur);return result;
+}
+function doImportCSV(){
+  if(!csvParsed.length){showToast('⚠️ No valid rows to import');return;}
+  const bid=document.getElementById('csvTargetBoard').value;
+  const board=S.boards[bid];if(!board){showToast('⚠️ Board not found');return;}
+  // find first backlog column (first column of board)
+  const backlogCol=board.columns[0];if(!backlogCol){showToast('⚠️ Board has no columns');return;}
+  if(!S.columns[backlogCol.id])S.columns[backlogCol.id]=[];
+  let added=0;
+  csvParsed.forEach(row=>{
+    const id=uid(bid);
+    S.cards[id]={
+      title:row.title,description:row.desc,labels:row.labelIds,
+      due:row.due,members:row.memberId?[row.memberId]:[],
+      sprint:'backlog',deps:[],images:[],comments:[],history:[],
+      checklist:getBoardCL(bid)
+    };
+    S.columns[backlogCol.id].push(id);added++;
+  });
+  save();closeUploadCSV();
+  if(S.activeBoard!==bid){switchBoard(bid);}else{render();}
+  showToast(added+' card'+(added!==1?'s':'')+' imported to '+board.name+' ✓');
 }
 function openInviteFlow(e){if(e)e.stopPropagation();document.getElementById('inviteErr').style.display='none';document.getElementById('inviteOk').style.display='none';document.getElementById('invEmail').value='';document.getElementById('inviteOverlay').classList.remove('hidden');}
 function closeInvite(){document.getElementById('inviteOverlay').classList.add('hidden');}
@@ -1286,7 +1479,7 @@ function mtgDrop(e,toSect){
   else if(toSect==='blocked'||toSect==='overdue'){targetCol=cols.find(c=>c.id==='it-fix'||c.id==='ops-blocked'||c.id.includes('block')||c.id.includes('fix'))||cols[Math.min(2,cols.length-1)];}
   if(!targetCol)return;mtgMoveCard(_mtgDragCid,targetCol.id);
 }
-function openPov(id){document.getElementById(id).classList.remove('hidden');if(id==='teamPov'){renderTeamList();renderColorRow();}if(id==='newBoardPov'){renderEmojiGrid();document.getElementById('newBoardName').value='';}if(id==='profilePov')openProfile();}
+function openPov(id){document.getElementById(id).classList.remove('hidden');if(id==='teamPov'){renderTeamList();renderColorRow();}if(id==='newBoardPov'){renderEmojiGrid();document.getElementById('newBoardName').value='';}if(id==='profilePov')openProfile();if(id==='labelsPov')renderLabelsList();}
 function closePov(id){document.getElementById(id).classList.add('hidden');}
 function renderTeamList(){const list=document.getElementById('teamList');if(!list)return;if(!S.members.length){list.innerHTML='<div style="text-align:center;padding:18px;color:var(--dm);font-size:12.5px">No members yet.</div>';return;}list.innerHTML=S.members.map(m=>'<div class="team-row"><div class="team-av" style="background:'+m.color+'">'+m.initials+'</div><div class="team-info"><div class="team-n">'+esc(m.name)+'</div><div class="team-s">'+m.initials+(m.email?' · '+esc(m.email):'')+'</div></div><button class="team-del" onclick="removeMember(\''+m.id+'\')">🗑</button></div>').join('');}
 function renderColorRow(){document.getElementById('colorRow').innerHTML=AVC.map(c=>'<div class="csw'+(c===selColor?' sel':'')+'" style="background:'+c+'" onclick="pickColor(\''+c+'\')"></div>').join('');}
@@ -1303,7 +1496,8 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
 document.getElementById('depPickerOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeDepPicker();});
 document.getElementById('inviteOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeInvite();});
-['teamPov','newBoardPov','profilePov'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closePov(id);});});
+['teamPov','newBoardPov','profilePov','labelsPov'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closePov(id);});});
+document.getElementById('csvUploadOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeUploadCSV();});
 document.addEventListener('click',e=>{
   if(!e.target.closest('.tsearch'))document.getElementById('searchDrop').classList.remove('open');
   if(!e.target.closest('.col-hd'))document.querySelectorAll('.cpop.open').forEach(p=>p.classList.remove('open'));
@@ -1314,9 +1508,10 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(!document.getElementById('depPickerOverlay').classList.contains('hidden')){closeDepPicker();return;}
     if(!document.getElementById('inviteOverlay').classList.contains('hidden')){closeInvite();return;}
+    if(!document.getElementById('csvUploadOverlay').classList.contains('hidden')){closeUploadCSV();return;}
     if(document.getElementById('archivePanel').classList.contains('open')){closePanel('archivePanel');return;}
     if(document.getElementById('notifPanel').classList.contains('open')){closePanel('notifPanel');return;}
-    for(const id of['teamPov','newBoardPov','profilePov']){if(!document.getElementById(id).classList.contains('hidden')){closePov(id);return;}}
+    for(const id of['teamPov','newBoardPov','profilePov','labelsPov']){if(!document.getElementById(id).classList.contains('hidden')){closePov(id);return;}}
     closeModal();
   }
   if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault();if(editCardId&&document.activeElement?.id!=='commInput')doAutoSave();}
